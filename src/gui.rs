@@ -85,6 +85,7 @@ impl VodiaInstallerGui {
 
         app
     }
+<<<<<<< HEAD
     fn start_uninstall(&mut self) {
         if self.install_running {
             return;
@@ -169,6 +170,8 @@ impl VodiaInstallerGui {
             }
         });
     }
+=======
+>>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
 }
 
 impl eframe::App for VodiaInstallerGui {
@@ -254,13 +257,18 @@ impl eframe::App for VodiaInstallerGui {
                 {
                     self.start_backend(true);
                 }
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Download Only"))
                     .clicked()
                 {
                     self.start_backend(false);
                 }
+<<<<<<< HEAD
             
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Uninstall"))
@@ -269,6 +277,9 @@ impl eframe::App for VodiaInstallerGui {
                     self.start_uninstall();
                 }
             
+=======
+
+>>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Clear Log"))
                     .clicked()

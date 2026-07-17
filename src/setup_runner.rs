@@ -232,8 +232,15 @@ async fn run_manifest_download(
                 println!("{}", target_dir.join("installation.txt").display());
                 println!();
 
+<<<<<<< HEAD
                 crate::manifest_installer::install_staged_windows_folder(&target_dir, install_dir)?;
 
+=======
+                crate::manifest_installer::install_staged_windows_folder(
+                    &target_dir,
+                    install_dir,
+                )?;
+>>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
             } else {
                 println!("Install step skipped.");
                 println!("Files were staged only.");
