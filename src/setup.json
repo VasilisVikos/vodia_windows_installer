@@ -1,0 +1,11 @@
+{
+    "settings": {
+      "activation_key": "",
+      "pw_pass": "<md5 password>",
+      "pw_user": "vodia",
+      "sys_wildcard": "*.vodia-pbx.com",
+      "sys_name": "Vodia Cloud PBX",
+      "email_global": "cloud",
+      "email_list_performance": "pbx@vodia.com"
+    }
+  }

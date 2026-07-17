@@ -1,0 +1,23 @@
+@"
+target/
+dist/
+
+VodiaPBX-*-windows/
+VodiaPBX-*-macos/
+
+*.log
+gui-crash.txt
+installation.txt
+install-vodia-pbx.ps1
+run-install-vodia-pbx.cmd
+
+*.pfx
+*.p12
+*.pem
+*.key
+*.crt
+
+.DS_Store
+Thumbs.db
+.vscode/
+"@ | Set-Content ".\.gitignore" -Encoding UTF8
