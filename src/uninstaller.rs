@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::{
     fs,
-    path::{Path},
+    path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -69,7 +69,7 @@ Read-Host "Press Enter to continue"
     let cmd_exe = Path::new(r"C:\Windows\System32\cmd.exe");
 
     let args = format!(r#"/k "{}""#, cmd_path.display());
-    
+
     crate::windows_admin::run_elevated_with_args(cmd_exe, &args)?;
 
     Ok(())

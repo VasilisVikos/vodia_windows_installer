@@ -1,6 +1,4 @@
-use crate::releases::{
-    SetupPackageCandidate, SetupPackageKind, TargetPlatform,
-};
+use crate::releases::{SetupPackageCandidate, SetupPackageKind, TargetPlatform};
 use anyhow::{bail, Context, Result};
 use reqwest::{header::RANGE, Client};
 use std::{
@@ -22,9 +20,7 @@ pub async fn run_vodia_setup(
     install_after_download: bool,
     install_dir: &Path,
 ) -> Result<()> {
-    let client = Client::builder()
-        .user_agent("VodiaPBXWizard/1.0")
-        .build()?;
+    let client = Client::builder().user_agent("VodiaPBXWizard/1.0").build()?;
 
     if target == TargetPlatform::Windows64 && prefer_setup_package {
         let candidates = crate::releases::candidate_windows_setup_packages(version);
@@ -79,14 +75,7 @@ pub async fn run_vodia_setup(
         }
     }
 
-    run_manifest_download(
-        client,
-        version,
-        target,
-        install_after_download,
-        install_dir,
-    )
-    .await?;
+    run_manifest_download(client, version, target, install_after_download, install_dir).await?;
 
     Ok(())
 }
@@ -165,8 +154,8 @@ async fn run_manifest_download(
     println!("{manifest_url}");
     println!();
 
-    let document = roxmltree::Document::parse(&xml)
-        .context("Failed to parse Vodia XML manifest")?;
+    let document =
+        roxmltree::Document::parse(&xml).context("Failed to parse Vodia XML manifest")?;
 
     let downloads = collect_manifest_items(&document, target)?;
 
@@ -177,10 +166,8 @@ async fn run_manifest_download(
         );
     }
 
-    let target_dir = env::current_dir()?.join(format!(
-        "VodiaPBX-{version}-{}",
-        target.folder_label()
-    ));
+    let target_dir =
+        env::current_dir()?.join(format!("VodiaPBX-{version}-{}", target.folder_label()));
 
     if target_dir.exists() {
         fs::remove_dir_all(&target_dir)?;
@@ -229,18 +216,10 @@ async fn run_manifest_download(
                 println!("and create/start the PBX Windows service.");
                 println!();
                 println!("Final login details will be written after the PBX initializes:");
-                println!("{}", target_dir.join("installation.txt").display());
+                println!("{}", install_dir.join("installation.txt").display());
                 println!();
 
-<<<<<<< HEAD
                 crate::manifest_installer::install_staged_windows_folder(&target_dir, install_dir)?;
-
-=======
-                crate::manifest_installer::install_staged_windows_folder(
-                    &target_dir,
-                    install_dir,
-                )?;
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
             } else {
                 println!("Install step skipped.");
                 println!("Files were staged only.");
@@ -321,7 +300,10 @@ fn collect_manifest_items(
 ) -> Result<Vec<ManifestItem>> {
     let mut items = Vec::new();
 
-    for node in document.descendants().filter(|node| node.has_tag_name("file")) {
+    for node in document
+        .descendants()
+        .filter(|node| node.has_tag_name("file"))
+    {
         let name = match node.attribute("name") {
             Some(value) => value,
             None => continue,
@@ -421,12 +403,7 @@ async fn url_exists(client: &Client, url: &str) -> bool {
         }
     }
 
-    match client
-        .get(url)
-        .header(RANGE, "bytes=0-0")
-        .send()
-        .await
-    {
+    match client.get(url).header(RANGE, "bytes=0-0").send().await {
         Ok(response) => response.status().is_success() || response.status().as_u16() == 206,
         Err(_) => false,
     }

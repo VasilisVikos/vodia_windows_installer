@@ -5,11 +5,8 @@ mod installer;
 mod manifest_installer;
 mod releases;
 mod setup_runner;
-mod windows_admin;
-<<<<<<< HEAD
 mod uninstaller;
-=======
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
+mod windows_admin;
 
 use anyhow::{bail, Result};
 use releases::TargetPlatform;
@@ -32,13 +29,10 @@ struct AppOptions {
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
-<<<<<<< HEAD
     if args.iter().any(|arg| arg == "--uninstall") {
         return crate::uninstaller::uninstall_vodia_pbx(None);
     }
 
-=======
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
     if args.is_empty() || args.iter().any(|arg| arg == "--gui") {
         return gui::run_gui();
     }
@@ -245,7 +239,9 @@ fn print_usage() {
     println!("Examples:");
     println!("  vodia-pbx-wizard.exe --gui");
     println!("  vodia-pbx-wizard.exe 68.0.37 --install");
-    println!("  vodia-pbx-wizard.exe 68.0.37 --install --install-dir \"C:\\Program Files\\Vodia\\PBX\"");
+    println!(
+        "  vodia-pbx-wizard.exe 68.0.37 --install --install-dir \"C:\\Program Files\\Vodia\\PBX\""
+    );
     println!("  vodia-pbx-wizard.exe 68.0.37 --no-setup");
     println!("  vodia-pbx-wizard.exe 68.0.4 --target macos --no-setup");
 }

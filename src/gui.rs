@@ -85,16 +85,159 @@ impl VodiaInstallerGui {
 
         app
     }
-<<<<<<< HEAD
+
+    fn refresh_latest_version(&mut self) {
+        let (sender, receiver) = mpsc::channel::<LatestMessage>();
+        self.latest_receiver = Some(receiver);
+
+        thread::spawn(move || match fetch_latest_version() {
+            Ok(version) => {
+                let _ = sender.send(LatestMessage::Loaded(version));
+            }
+            Err(_error) => {
+                let _ = sender.send(LatestMessage::Failed);
+            }
+        });
+    }
+
+    fn start_backend(&mut self, install: bool) {
+        self.log.clear();
+
+        let requested_version = self.version_input.clone();
+        let use_latest = !self.version_manually_edited;
+        let install_dir = self.install_dir.clone();
+
+        if self.version_manually_edited {
+            if let Err(error) = normalize_version(&requested_version) {
+                self.log.push_str("Cannot start installer.\n");
+                self.log.push_str(&format!("{error}\n"));
+                return;
+            }
+        }
+
+        self.install_running = true;
+
+        let (sender, receiver) = mpsc::channel::<GuiMessage>();
+        self.receiver = Some(receiver);
+
+        thread::spawn(move || {
+            let version = if use_latest {
+                let _ = sender.send(GuiMessage::Log(
+                    "Checking latest Vodia PBX version...".to_string(),
+                ));
+
+                match fetch_latest_version() {
+                    Ok(version) => {
+                        let _ = sender.send(GuiMessage::Log(format!(
+                            "Using latest Vodia PBX version: v{version}"
+                        )));
+
+                        version
+                    }
+                    Err(error) => {
+                        let _ = sender.send(GuiMessage::Failed(format!(
+                            "Could not fetch latest Vodia PBX version: {error}"
+                        )));
+                        return;
+                    }
+                }
+            } else {
+                match normalize_version(&requested_version) {
+                    Ok(version) => {
+                        let _ = sender.send(GuiMessage::Log(format!(
+                            "Using custom Vodia PBX version: v{version}"
+                        )));
+
+                        version
+                    }
+                    Err(error) => {
+                        let _ = sender.send(GuiMessage::Failed(error));
+                        return;
+                    }
+                }
+            };
+
+            let exe = match std::env::current_exe() {
+                Ok(path) => path,
+                Err(error) => {
+                    let _ = sender.send(GuiMessage::Failed(format!(
+                        "Could not find current executable: {error}"
+                    )));
+                    return;
+                }
+            };
+
+            let mut command = Command::new(exe);
+
+            command.arg(version);
+            command.arg("--yes");
+
+            if install {
+                command.arg("--install");
+            }
+
+            command.arg("--install-dir");
+            command.arg(install_dir);
+
+            command.stdout(Stdio::piped());
+            command.stderr(Stdio::piped());
+
+            let mut child = match command.spawn() {
+                Ok(child) => child,
+                Err(error) => {
+                    let _ = sender.send(GuiMessage::Failed(format!(
+                        "Failed to start installer backend: {error}"
+                    )));
+                    return;
+                }
+            };
+
+            if let Some(stdout) = child.stdout.take() {
+                let sender_clone = sender.clone();
+
+                thread::spawn(move || {
+                    let reader = BufReader::new(stdout);
+
+                    for line in reader.lines().map_while(Result::ok) {
+                        let _ = sender_clone.send(GuiMessage::Log(line));
+                    }
+                });
+            }
+
+            if let Some(stderr) = child.stderr.take() {
+                let sender_clone = sender.clone();
+
+                thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+
+                    for line in reader.lines().map_while(Result::ok) {
+                        let _ = sender_clone.send(GuiMessage::Log(line));
+                    }
+                });
+            }
+
+            match child.wait() {
+                Ok(status) => {
+                    let code = status.code().unwrap_or(-1);
+                    let _ = sender.send(GuiMessage::Done(code));
+                }
+                Err(error) => {
+                    let _ =
+                        sender.send(GuiMessage::Failed(format!("Backend wait failed: {error}")));
+                }
+            }
+        });
+    }
+
     fn start_uninstall(&mut self) {
         if self.install_running {
             return;
         }
-    
+
         self.install_running = true;
         self.log.clear();
         self.log.push_str("Starting Vodia PBX uninstaller...\n");
-    
+
         let exe_path = match std::env::current_exe() {
             Ok(path) => path,
             Err(error) => {
@@ -104,15 +247,15 @@ impl VodiaInstallerGui {
                 return;
             }
         };
-    
-        let (tx, rx) = mpsc::channel();
+
+        let (tx, rx) = mpsc::channel::<GuiMessage>();
         self.receiver = Some(rx);
-    
+
         thread::spawn(move || {
             let _ = tx.send(GuiMessage::Log(
-                "Starting Vodia PBX uninstaller...\n".to_string(),
+                "Starting Vodia PBX uninstaller...".to_string(),
             ));
-    
+
             let mut child = match Command::new(exe_path)
                 .arg("--uninstall")
                 .stdout(Stdio::piped())
@@ -122,56 +265,122 @@ impl VodiaInstallerGui {
                 Ok(child) => child,
                 Err(error) => {
                     let _ = tx.send(GuiMessage::Failed(format!(
-                        "Failed to start uninstaller: {error}\n"
+                        "Failed to start uninstaller: {error}"
                     )));
                     return;
                 }
             };
-    
+
             if let Some(stdout) = child.stdout.take() {
                 let tx_stdout = tx.clone();
-    
+
                 thread::spawn(move || {
                     let reader = BufReader::new(stdout);
-    
-                    for line in reader.lines().flatten() {
-                        let _ = tx_stdout.send(GuiMessage::Log(format!("{line}\n")));
+
+                    for line in reader.lines().map_while(Result::ok) {
+                        let _ = tx_stdout.send(GuiMessage::Log(line));
                     }
                 });
             }
-    
+
             if let Some(stderr) = child.stderr.take() {
                 let tx_stderr = tx.clone();
-    
+
                 thread::spawn(move || {
                     let reader = BufReader::new(stderr);
-    
-                    for line in reader.lines().flatten() {
-                        let _ = tx_stderr.send(GuiMessage::Log(format!("{line}\n")));
+
+                    for line in reader.lines().map_while(Result::ok) {
+                        let _ = tx_stderr.send(GuiMessage::Log(line));
                     }
                 });
             }
-    
+
             match child.wait() {
                 Ok(status) if status.success() => {
-                    let _ = tx.send(GuiMessage::Log("Uninstaller completed.\n".to_string()));
+                    let _ = tx.send(GuiMessage::Log("Uninstaller completed.".to_string()));
                     let _ = tx.send(GuiMessage::Done(0));
                 }
                 Ok(status) => {
                     let _ = tx.send(GuiMessage::Failed(format!(
-                        "Uninstaller exited with status: {status}\n"
+                        "Uninstaller exited with status: {status}"
                     )));
                 }
                 Err(error) => {
                     let _ = tx.send(GuiMessage::Failed(format!(
-                        "Failed waiting for uninstaller: {error}\n"
+                        "Failed waiting for uninstaller: {error}"
                     )));
                 }
             }
         });
     }
-=======
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
+
+    fn drain_messages(&mut self) {
+        let mut finished = false;
+
+        if let Some(receiver) = &self.receiver {
+            while let Ok(message) = receiver.try_recv() {
+                match message {
+                    GuiMessage::Log(line) => {
+                        self.log.push_str(&line);
+                        self.log.push('\n');
+                    }
+
+                    GuiMessage::Done(code) => {
+                        if code == 0 {
+                            self.log.push_str("\nCompleted successfully.\n");
+                        } else {
+                            self.log
+                                .push_str(&format!("\nInstaller exited with error code {code}.\n"));
+                        }
+
+                        finished = true;
+                    }
+
+                    GuiMessage::Failed(error) => {
+                        self.log.push_str(&format!("\nERROR: {error}\n"));
+                        finished = true;
+                    }
+                }
+            }
+        }
+
+        if finished {
+            self.install_running = false;
+            self.receiver = None;
+        }
+    }
+
+    fn drain_latest_messages(&mut self) {
+        let mut finished = false;
+
+        if let Some(receiver) = &self.latest_receiver {
+            while let Ok(message) = receiver.try_recv() {
+                match message {
+                    LatestMessage::Loaded(version) => {
+                        self.latest_version = Some(version.clone());
+
+                        if !self.version_manually_edited {
+                            self.version_input = version;
+                        }
+
+                        finished = true;
+                    }
+
+                    LatestMessage::Failed => {
+                        if !self.version_manually_edited {
+                            self.version_input = FALLBACK_VERSION.to_string();
+                        }
+
+                        finished = true;
+                    }
+                }
+            }
+        }
+
+        if finished {
+            self.latest_receiver = None;
+        }
+    }
 }
 
 impl eframe::App for VodiaInstallerGui {
@@ -257,29 +466,21 @@ impl eframe::App for VodiaInstallerGui {
                 {
                     self.start_backend(true);
                 }
-<<<<<<< HEAD
-            
-=======
 
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Download Only"))
                     .clicked()
                 {
                     self.start_backend(false);
                 }
-<<<<<<< HEAD
-            
+
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Uninstall"))
                     .clicked()
                 {
                     self.start_uninstall();
                 }
-            
-=======
 
->>>>>>> 5e82ce2cfacd3d7127f5cf438cff8ece980bdd3c
                 if ui
                     .add_enabled(!self.install_running, egui::Button::new("Clear Log"))
                     .clicked()
@@ -326,227 +527,6 @@ impl eframe::App for VodiaInstallerGui {
 
         if self.install_running || self.latest_receiver.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
-        }
-    }
-}
-
-impl VodiaInstallerGui {
-    fn refresh_latest_version(&mut self) {
-        let (sender, receiver) = mpsc::channel::<LatestMessage>();
-        self.latest_receiver = Some(receiver);
-
-        thread::spawn(move || match fetch_latest_version() {
-            Ok(version) => {
-                let _ = sender.send(LatestMessage::Loaded(version));
-            }
-
-            Err(_error) => {
-                let _ = sender.send(LatestMessage::Failed);
-            }
-        });
-    }
-
-    fn start_backend(&mut self, install: bool) {
-        self.log.clear();
-
-        let requested_version = self.version_input.clone();
-        let use_latest = !self.version_manually_edited;
-        let install_dir = self.install_dir.clone();
-
-        if self.version_manually_edited {
-            if let Err(error) = normalize_version(&requested_version) {
-                self.log.push_str("Cannot start installer.\n");
-                self.log.push_str(&format!("{error}\n"));
-                return;
-            }
-        }
-
-        self.install_running = true;
-
-        let (sender, receiver) = mpsc::channel::<GuiMessage>();
-        self.receiver = Some(receiver);
-
-        thread::spawn(move || {
-            let version = if use_latest {
-                let _ = sender.send(GuiMessage::Log(
-                    "Checking latest Vodia PBX version...".to_string(),
-                ));
-
-                match fetch_latest_version() {
-                    Ok(version) => {
-                        let _ = sender.send(GuiMessage::Log(format!(
-                            "Using latest Vodia PBX version: v{version}"
-                        )));
-
-                        version
-                    }
-
-                    Err(error) => {
-                        let _ = sender.send(GuiMessage::Failed(format!(
-                            "Could not fetch latest Vodia PBX version: {error}"
-                        )));
-                        return;
-                    }
-                }
-            } else {
-                match normalize_version(&requested_version) {
-                    Ok(version) => {
-                        let _ = sender.send(GuiMessage::Log(format!(
-                            "Using custom Vodia PBX version: v{version}"
-                        )));
-
-                        version
-                    }
-
-                    Err(error) => {
-                        let _ = sender.send(GuiMessage::Failed(error));
-                        return;
-                    }
-                }
-            };
-
-            let exe = match std::env::current_exe() {
-                Ok(path) => path,
-
-                Err(error) => {
-                    let _ = sender.send(GuiMessage::Failed(format!(
-                        "Could not find current executable: {error}"
-                    )));
-                    return;
-                }
-            };
-
-            let mut command = Command::new(exe);
-
-            command.arg(version);
-            command.arg("--yes");
-
-            if install {
-                command.arg("--install");
-            }
-
-            command.arg("--install-dir");
-            command.arg(install_dir);
-
-            command.stdout(Stdio::piped());
-            command.stderr(Stdio::piped());
-
-            let mut child = match command.spawn() {
-                Ok(child) => child,
-
-                Err(error) => {
-                    let _ = sender.send(GuiMessage::Failed(format!(
-                        "Failed to start installer backend: {error}"
-                    )));
-                    return;
-                }
-            };
-
-            if let Some(stdout) = child.stdout.take() {
-                let sender_clone = sender.clone();
-
-                thread::spawn(move || {
-                    let reader = BufReader::new(stdout);
-
-                    for line in reader.lines().map_while(Result::ok) {
-                        let _ = sender_clone.send(GuiMessage::Log(line));
-                    }
-                });
-            }
-
-            if let Some(stderr) = child.stderr.take() {
-                let sender_clone = sender.clone();
-
-                thread::spawn(move || {
-                    let reader = BufReader::new(stderr);
-
-                    for line in reader.lines().map_while(Result::ok) {
-                        let _ = sender_clone.send(GuiMessage::Log(line));
-                    }
-                });
-            }
-
-            match child.wait() {
-                Ok(status) => {
-                    let code = status.code().unwrap_or(-1);
-                    let _ = sender.send(GuiMessage::Done(code));
-                }
-
-                Err(error) => {
-                    let _ = sender.send(GuiMessage::Failed(format!(
-                        "Backend wait failed: {error}"
-                    )));
-                }
-            }
-        });
-    }
-
-    fn drain_messages(&mut self) {
-        let mut finished = false;
-
-        if let Some(receiver) = &self.receiver {
-            while let Ok(message) = receiver.try_recv() {
-                match message {
-                    GuiMessage::Log(line) => {
-                        self.log.push_str(&line);
-                        self.log.push('\n');
-                    }
-
-                    GuiMessage::Done(code) => {
-                        if code == 0 {
-                            self.log.push_str("\nCompleted successfully.\n");
-                        } else {
-                            self.log.push_str(&format!(
-                                "\nInstaller exited with error code {code}.\n"
-                            ));
-                        }
-
-                        finished = true;
-                    }
-
-                    GuiMessage::Failed(error) => {
-                        self.log.push_str(&format!("\nERROR: {error}\n"));
-                        finished = true;
-                    }
-                }
-            }
-        }
-
-        if finished {
-            self.install_running = false;
-            self.receiver = None;
-        }
-    }
-
-    fn drain_latest_messages(&mut self) {
-        let mut finished = false;
-
-        if let Some(receiver) = &self.latest_receiver {
-            while let Ok(message) = receiver.try_recv() {
-                match message {
-                    LatestMessage::Loaded(version) => {
-                        self.latest_version = Some(version.clone());
-
-                        if !self.version_manually_edited {
-                            self.version_input = version;
-                        }
-
-                        finished = true;
-                    }
-
-                    LatestMessage::Failed => {
-                        if !self.version_manually_edited {
-                            self.version_input = FALLBACK_VERSION.to_string();
-                        }
-
-                        finished = true;
-                    }
-                }
-            }
-        }
-
-        if finished {
-            self.latest_receiver = None;
         }
     }
 }
@@ -606,11 +586,7 @@ fn load_logo_texture(ctx: &egui::Context) -> Option<egui::TextureHandle> {
 
     let color_image = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
 
-    Some(ctx.load_texture(
-        "vodia_logo",
-        color_image,
-        egui::TextureOptions::LINEAR,
-    ))
+    Some(ctx.load_texture("vodia_logo", color_image, egui::TextureOptions::LINEAR))
 }
 
 fn load_window_icon() -> Option<egui::IconData> {

@@ -120,7 +120,10 @@ pub fn find_setup_exe(dir: &Path) -> Option<PathBuf> {
         return Some(direct);
     }
 
-    for entry in walkdir::WalkDir::new(dir).into_iter().filter_map(|entry| entry.ok()) {
+    for entry in walkdir::WalkDir::new(dir)
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+    {
         let path = entry.path();
 
         if path.is_file()
